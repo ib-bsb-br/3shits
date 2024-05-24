@@ -1554,7 +1554,12 @@ struct Document {
                         DelRowCol(selected.x, 0, selected.g->xs, 1, selected.x - 1, -1, -1, 0);
                 } else if (c && selected.TextEdit()) {
                     if (selected.cursorend == 0) return nullptr;
+                    if (lastedit_char != 0 || c != lastedit_cell || selected.cursor != lastedit_loc-1) {
                     c->AddUndo(this);
+                    }
+                    lastedit_cell = c;
+                    lastedit_loc = selected.cursor;
+                    lastedit_char = 0;
                     c->text.Backspace(selected);
                     Refresh();
                 } else {
@@ -1574,7 +1579,12 @@ struct Document {
                                   0);
                 } else if (c && selected.TextEdit()) {
                     if (selected.cursor == c->text.t.Len()) return nullptr;
+                    if (lastedit_char != 0 || c != lastedit_cell || selected.cursor != lastedit_loc) {
                     c->AddUndo(this);
+                    }
+                    lastedit_cell = c;
+                    lastedit_loc = selected.cursor;
+                    lastedit_char = 0;
                     c->text.Delete(selected);
                     Refresh();
                 } else {
