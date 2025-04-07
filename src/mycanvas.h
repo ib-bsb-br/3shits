@@ -153,7 +153,8 @@ struct TSCanvas : public wxScrolledWindow {
         bool ctrl = me.CmdDown();
         if (sys->zoomscroll) ctrl = !ctrl;
         wxClientDC dc(this);
-        if (me.AltDown() || ctrl || me.ShiftDown()) {
+        //if (me.AltDown() || ctrl || me.ShiftDown()) {
+        if (me.AltDown() || ctrl) {
             mousewheelaccum += me.GetWheelRotation();
             int steps = mousewheelaccum / me.GetWheelDelta();
             if (!steps) return;
@@ -161,8 +162,8 @@ struct TSCanvas : public wxScrolledWindow {
 
             UpdateHover(me.GetX(), me.GetY(), dc);
             Status(doc->Wheel(dc, steps, me.AltDown(), ctrl, me.ShiftDown()));
-        } else if (me.GetWheelAxis()) {
-            CursorScroll(me.GetWheelRotation() * g_scrollratewheel, 0);
+        } else if ((bool(me.GetWheelAxis())) != me.ShiftDown()){
+            CursorScroll(me.GetWheelRotation() * g_scrollratewheel*(me.ShiftDown()?-1:1), 0);
             UpdateHover(me.GetX(), me.GetY(), dc);
         } else {
             CursorScroll(0, -me.GetWheelRotation() * g_scrollratewheel);

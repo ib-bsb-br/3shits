@@ -444,7 +444,8 @@ struct Document {
         int result = subprocess_create(cmdl.data(),
             subprocess_option_inherit_environment
             | subprocess_option_enable_async
-            | subprocess_option_no_window, &subprocess);
+            | subprocess_option_no_window
+            , &subprocess);
         wxString msg;
         if (result) {
             msg=wxString::Format("subprocess_create failed: %d\n", result);
@@ -725,6 +726,14 @@ struct Document {
         if (!dir) return nullptr;
         ShiftToCenter(dc);
         if (alt) {
+            //sw->SetFocus();
+            //sw->frame->GetMenuBar()->EnableTop(0, false);
+            //sw->frame->GetMenuBar()->EnableTop(0, true);
+            //wxMenuBar* bar= sys->frame->GetMenuBar();
+            //bar->DeactivateMenu();
+            //bar->EnableTop(bar->FindMenu("File"), false);
+            //bar->EnableTop(bar->FindMenu("File"), true);
+
             if (!selected.g) return NoSel();
             if (selected.xs > 0) {
                 if (!LastUndoSameCellAny(selected.g->cell)) selected.g->cell->AddUndo(this);
@@ -1156,7 +1165,7 @@ struct Document {
             lastedit_cell = c;
             lastedit_loc = selected.cursor;
             lastedit_char = uk;
-                               // keystroke undos within same cell
+            // keystroke undos within same cell
             c->text.Key(this, uk, selected);
             ScrollIfSelectionOutOfView(dc, selected, true);
             return nullptr;
@@ -1555,7 +1564,7 @@ struct Document {
                 } else if (c && selected.TextEdit()) {
                     if (selected.cursorend == 0) return nullptr;
                     if (lastedit_char != 0 || c != lastedit_cell || selected.cursor != lastedit_loc-1) {
-                    c->AddUndo(this);
+                        c->AddUndo(this);                    
                     }
                     lastedit_cell = c;
                     lastedit_loc = selected.cursor;
@@ -1580,7 +1589,7 @@ struct Document {
                 } else if (c && selected.TextEdit()) {
                     if (selected.cursor == c->text.t.Len()) return nullptr;
                     if (lastedit_char != 0 || c != lastedit_cell || selected.cursor != lastedit_loc) {
-                    c->AddUndo(this);
+                        c->AddUndo(this);                    
                     }
                     lastedit_cell = c;
                     lastedit_loc = selected.cursor;
@@ -2134,12 +2143,15 @@ struct Document {
             {
                 if (!c->parent) return nullptr;
                 c->AddUndo(this);
-                long maxid = rootgrid->FindMaxID();
+                long steps_run = 0;
+                long maxid = rootgrid->FindMaxID(steps_run);
                 maxid = max(maxid + 1, 0);//in case of overflow
                 wxString idappend = wxString::Format(L" #T%ld", maxid);
                 c->text.t.Append(idappend);
                 Refresh();
-                return nullptr;
+                wxString debug_ret = wxString::Format(L"Steps run: %ld", steps_run);
+                sw->Status(debug_ret.c_str());
+                return L"";
             }
             case A_CUSTOM2:
             {
@@ -2149,12 +2161,14 @@ struct Document {
                     return _(L"No link ID found.");
                 }
                 wxString id = c->text.t.SubString(begin + 1, end - 1);//+1-1 since inclusive, but output includes {}
-                Cell* found = rootgrid->FindIDLink(id);
+                long steps_run = 0;
+                Cell* found = rootgrid->FindIDLink(id, steps_run);
                 if (!found) return _(L"No matches for ID.");
                 SetSelect(found->parent->grid->FindCell(found));
                 sys->frame->seltimer.StartTimer();
                 ScrollOrZoom(dc, true);
-                return nullptr;
+                sw->Status(wxString::Format(L"Cells checked: %ld", steps_run));
+                return L"";
             }
             case A_CUSTOM3:
             {
@@ -2366,6 +2380,7 @@ struct Document {
                                 PasteSingleText(c, as[0]);
                             } else {
                                 c->parent->AddUndo(this);
+                                //c->AddUndo(this);
                                 c->ResetLayout();
                                 DELETEP(c->grid);
                                 sys->FillRows(c->AddGrid(), as, sys->CountCol(as[0]), 0, 0);

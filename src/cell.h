@@ -457,28 +457,38 @@ struct Cell {
     }
     // similar to FindLink, but searches for matching string ending with the given string
     // will return the first match it finds
-    Cell* FindIDLink(wxString &id) {
+    Cell* FindIDLink(wxString &id, long& steps_run) {
         Cell* find = nullptr;
+        steps_run += 1;
         if (text.t.EndsWith(id)) find = this;
-        if (!find && grid) find = grid->FindIDLink(id);
+        if (!find && grid) find = grid->FindIDLink(id, steps_run);
         return find;
     }
     //equal to regex #T[0-9]\d*$
     //TODO: need to reset search every time { is encountered
-    long FindMaxID() {
+    long FindMaxID(long& steps_run) {
         long l = text.t.Length();
         long id = 0;
+        steps_run += 1;
         if (l >= 3) {
             long i = l - 1;
+            steps_run += 2;
             while (i>= 2 && text.t[i].GetValue() >= 48 && text.t[i].GetValue()<58) {
                 --i;
+                steps_run += 2;
             }
             // Check if the last number wasn't 0 and if the next two characters are '#' and 'T'
-            if (i >= 1 && i < l - 1 && text.t[i] == L'T' && text.t[i - 1] == L'#'  && text.t[i + 1] != L'0') {
+            steps_run += 2;
+            //if (i >= 1 && i < l - 1 && text.t[i] == L'T' && text.t[i - 1] == L'#'  && text.t[i + 1] != L'0') {
+            if (i >= 1 && i < l - 1 && text.t[i] == L'T' && text.t[i - 1] == L'#') {
                 if (!text.t.Mid(i + 1).ToLong(&id)) id = 0; //TODO: Long is actually int32, can change everything to use int
+                steps_run += 10;
             }
         }
-        if (grid) id = max(id, grid->FindMaxID());
+        if (grid) {
+            auto tmp = grid->FindMaxID(steps_run);
+            id = max(id, tmp);
+        }
         return id;
     }
     

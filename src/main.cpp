@@ -3,6 +3,7 @@
 
 #ifndef __WXMSW__
 #define SIMPLERENDER
+//#define SIMPLERENDER2
 #endif
 
 //#define SIMPLERENDER // for testing

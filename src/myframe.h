@@ -1,3 +1,25 @@
+//struct MyToolBar :wxToolBar
+//{
+//    MyToolBar(wxWindow* parent, wxWindowID id, const wxPoint& pos = wxDefaultPosition, const wxSize& size = wxDefaultSize, long style = wxTB_DEFAULT_STYLE, const wxString& name = wxToolBarNameStr)
+//        : wxToolBar(parent, id, pos, size, style, name)
+//    {
+//        Bind(wxEVT_MOUSEWHEEL, &MyToolBar::OnMouseWheel, this);
+//    }
+//
+//    void OnMouseWheel(wxMouseEvent& event)
+//    {
+//        if (wxGetKeyState(WXK_ALT))
+//        {
+//            // Alt is pressed, let the event propagate to other windows (e.g., the canvas)
+//            event.Skip();
+//        }
+//        else
+//        {
+//            // Process the event normally if needed, then skip to allow default handling
+//            event.Skip();
+//        }
+//    }
+//};
 struct MyFrame : wxFrame {
     wxMenu *editmenupopup;
     wxString exepath_;
@@ -77,6 +99,12 @@ struct MyFrame : wxFrame {
         menu->Append(tag, newcontents, help);
         menustrings[item] = key;
     }
+    //void MyCreateToolBar() {
+    //    // use MyToolBar instead of wxToolBar to handle mouse wheel events
+    //    //does same thing as tb = CreateToolBar(wxBORDER_NONE | wxTB_HORIZONTAL | wxTB_FLAT | wxTB_NODIVIDER);
+    //    tb = new MyToolBar(this, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+    //                       wxTB_HORIZONTAL | wxTB_FLAT | wxTB_NODIVIDER);
+    //}
 
     MyFrame(wxString exename, MyApp *_app)
         : wxFrame((wxFrame *)nullptr, wxID_ANY, L"TreeSheets", wxDefaultPosition, wxDefaultSize,
@@ -641,7 +669,9 @@ struct MyFrame : wxFrame {
         wxColour toolbgcol(iconset ? 0xF0ECE8 : 0xD8C7BC);
 
         if (showtbar || mergetbar) {
-            tb = CreateToolBar(wxBORDER_NONE | wxTB_HORIZONTAL | wxTB_FLAT | wxTB_NODIVIDER);
+            tb = CreateToolBar(wxBORDER_NONE | wxTB_HORIZONTAL | wxTB_FLAT | wxTB_NODIVIDER);//!DEBUG
+            //tb = CreateToolBar(wxBORDER_NONE | wxTB_HORIZONTAL | wxTB_FLAT | wxTB_NODIVIDER | wxTB_NOALT);
+            //MyCreateToolBar();
             tb->SetOwnBackgroundColour(toolbgcol);
 
             #ifdef __WXMAC__

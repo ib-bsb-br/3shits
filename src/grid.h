@@ -314,16 +314,19 @@ struct Grid {
     }
     // similar to FindLink, but searches for matching string ending with the given string
     // will return the first match it finds
-    Cell* FindIDLink(wxString& id) {
+    Cell* FindIDLink(wxString& id, long& steps_run) {
         foreachcell(c) {
-            Cell* find = c->FindIDLink(id);
+            Cell* find = c->FindIDLink(id,steps_run);
             if (find) return find;
         }
         return nullptr;
     }
-    long FindMaxID() {
+    long FindMaxID(long& steps_run) {
         long id = 0;
-        foreachcell(c) id = max(id, c->FindMaxID());
+        foreachcell(c) {
+            auto tmp = c->FindMaxID(steps_run);
+            id = max(id, tmp);
+        }
         return id;
     }
 
