@@ -15,6 +15,19 @@ It's like a mind mapper, but more organized and compact.
 It's like an outliner, but in more than one dimension.
 It's like a text editor, but with structure.
 
+Grid semantics (sibling cells)
+------------------------------
+Within any single grid, sibling cells do have meaningful positional relationships:
+
+- A cell's row and column define its address in that grid (like `column x, row y`).
+- Moving content from one column to another (even in the same row) changes its structural meaning,
+  because operations such as selection, insertion, deletion, sorting, and scripted access all use
+  row/column coordinates.
+- Siblings only share the same parent grid; this does **not** make them interchangeable by default.
+
+So, in TreeSheets, placing a sibling cell in a different row or column is generally not semantically
+neutral: it changes where that information lives in the structure.
+
 Community
 ---------
 If you like, you are kindly invited to join the [Discord channel](https://discord.gg/HAfKkJz) and 
