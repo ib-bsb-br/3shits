@@ -15,18 +15,37 @@ It's like a mind mapper, but more organized and compact.
 It's like an outliner, but in more than one dimension.
 It's like a text editor, but with structure.
 
-Grid semantics (sibling cells)
-------------------------------
+Grid semantics and movement
+---------------------------
 Within any single grid, sibling cells do have meaningful positional relationships:
 
 - A cell's row and column define its address in that grid (like `column x, row y`).
-- Moving content from one column to another (even in the same row) changes its structural meaning,
-  because operations such as selection, insertion, deletion, sorting, and scripted access all use
-  row/column coordinates.
-- Siblings only share the same parent grid; this does **not** make them interchangeable by default.
+- Moving a sibling to a different row or column changes its structural meaning, because selection,
+  insertion, deletion, sorting, export, and scripting all use row/column coordinates.
+- Siblings share the same parent grid, but that does **not** make them interchangeable by default.
 
-So, in TreeSheets, placing a sibling cell in a different row or column is generally not semantically
-neutral: it changes where that information lives in the structure.
+The implementation of movement matters too:
+
+- `CTRL+LEFT|RIGHT|UP|DOWN` moves a selection by swapping whole cell objects inside the grid, not by
+  erasing one cell and rewriting only the visible text somewhere else.
+- Because the whole cell moves, its attached state moves with it too: text, colors, style bits,
+  image, note, and any subgrid all stay attached to that cell as it changes position.
+- In other words, ordinary cell movement is positional relocation of the actual cell payload, not a
+  text-only copy/delete operation.
+
+`Hierarchy Swap` (`F8`) is different:
+
+- It is not a simple left/right/up/down move inside one flat sibling set.
+- Instead, it restructures the tree by promoting a matching cell upward, rebuilding the former
+  parent chain as nested children under that promoted cell, deleting emptied containers, and merging
+  with same-named cells when needed.
+- Since this operation works by restructuring cells and their attached subgrids, it preserves
+  associated cell data as part of that structural transformation rather than treating the cell as
+  plain text.
+
+So, in TreeSheets, sibling placement is meaningful, ordinary movement relocates the whole cell, and
+`Hierarchy Swap` performs a higher-level hierarchy rewrite rather than a simple in-place sibling
+swap.
 
 Community
 ---------
