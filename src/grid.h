@@ -187,7 +187,7 @@ struct Grid {
                 }
             };
             if (!sys->fastrender && view_grid_outer_spacing && cell->cellcolor != 0xFFFFFF) {
-                dc.SetPen(sys->darkmode ? *wxBLACK_PEN : *wxWHITE_PEN);
+                dc.SetPen(wxPen(LightColor(0xFFFFFF)));
                 drawlines();
             }
             // dotted lines result in very expensive drawline calls
@@ -250,7 +250,7 @@ struct Grid {
         }
         if (view_grid_outer_spacing && cell->drawstyle == DS_GRID) {
             dc.SetBrush(*wxTRANSPARENT_BRUSH);
-            dc.SetPen(wxPen(wxColour(LightColor(bordercolor))));
+            dc.SetPen(wxPen(LightColor(bordercolor)));
             loop(i, view_grid_outer_spacing - 1) {
                 dc.DrawRoundedRectangle(
                     bx + xoff + view_grid_outer_spacing - i,
@@ -400,8 +400,8 @@ struct Grid {
         if (sel.Thin()) {
             DrawInsert(doc, dc, sel, 0);
         } else {
-            dc.SetBrush(sys->darkmode ? *wxWHITE_BRUSH : *wxBLACK_BRUSH);
-            dc.SetPen(sys->darkmode ? *wxWHITE_PEN : *wxBLACK_PEN);
+            dc.SetBrush(wxBrush(LightColor(0x000000)));
+            dc.SetPen(wxPen(LightColor(0x000000)));
             wxRect g = GetRect(doc, sel);
             int lw = g_line_width;
             int te = sel.TextEdit();
@@ -895,6 +895,7 @@ struct Grid {
                     auto t = new Cell(f, p);
                     t->text = p->text;
                     t->text.cell = t;
+                    t->note = p->note;
                     t->grid = f->grid;
                     if (t->grid) t->grid->ReParent(t);
                     f->grid = new Grid(1, 1);

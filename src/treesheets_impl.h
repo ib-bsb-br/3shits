@@ -189,6 +189,11 @@ struct TreeSheetsScriptImpl : public ScriptInterface {
 
     int GetStyle() { return current->text.stylebits; }
 
+    void RemoveImage() {
+        AddUndoIfNecessary();
+        current->text.image = nullptr;
+    }
+
     void SetStatusMessage(std::string_view message) {
         auto ws = wxString(message.data(), message.size());
         sys->frame->SetStatus(ws);
@@ -211,6 +216,13 @@ struct TreeSheetsScriptImpl : public ScriptInterface {
     int64_t GetLastEdit() { return current->text.lastedit.GetValue().GetValue(); }
 
     bool IsTag() { return current->IsTag(document); }
+
+    bool HasImage() { return current->text.image; }
+    bool SetImage(std::string_view fn) {
+        AddUndoIfNecessary();
+        return document->LoadImageIntoCell(wxString::FromUTF8(fn.data(), fn.size()), current,
+                                           sys->frame->FromDIP(1.0));
+    }
 };
 
 static int64_t TreeSheetsLoader(string_view_nt absfilename, std::string *dest, int64_t start,

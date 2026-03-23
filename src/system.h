@@ -32,6 +32,7 @@ struct System {
     bool thinselc {true};
     bool minclose {false};
     bool singletray {false};
+    bool startminimized {false};
     bool centered {true};
     bool fswatch {true};
     int autohtmlexport {0};
@@ -41,7 +42,7 @@ struct System {
     bool showtoolbar {true};
     bool showstatusbar {true};
     bool followdarkmode {false};
-    bool darkmode {false};
+    uint colormask {0};
     int sortcolumn;
     int sortxs;
     int sortdescending;
@@ -55,9 +56,9 @@ struct System {
             sys->cfg->Flush();
         }
     } every_second_timer;
-    uint lastcellcolor {0xFFFFFF};
-    uint lasttextcolor {0};
-    uint lastbordcolor {0xA0A0A0};
+    int lastcellcolor {0xFFFFFF};
+    int lasttextcolor {0};
+    int lastbordcolor {0xA0A0A0};
     Image *lastimage {nullptr};
     int customcolor {0xFFFFFF};
     int cursorcolor {0x00FF00};
@@ -88,6 +89,7 @@ struct System {
         cfg->Read(L"followdarkmode", &followdarkmode, followdarkmode);
         cfg->Read(L"minclose", &minclose, minclose);
         cfg->Read(L"singletray", &singletray, singletray);
+        cfg->Read(L"startminimized", &startminimized, startminimized);
         cfg->Read(L"centered", &centered, centered);
         cfg->Read(L"fswatch", &fswatch, fswatch);
         cfg->Read(L"casesensitivesearch", &casesensitivesearch, casesensitivesearch);
@@ -98,9 +100,12 @@ struct System {
         cfg->Read(L"showstatusbar", &showstatusbar, showstatusbar);
         cfg->Read(L"notesizex", &notesizex, notesizex);
         cfg->Read(L"notesizey", &notesizey, notesizey);
+        cfg->Read(L"lastcellcolor", &lastcellcolor, lastcellcolor);
+        cfg->Read(L"lasttextcolor", &lasttextcolor, lasttextcolor);
+        cfg->Read(L"lastbordcolor", &lastbordcolor, lastbordcolor);
         // fsw.Connect(wxID_ANY, wxID_ANY, wxEVT_FSWATCHER,
         // wxFileSystemWatcherEventHandler(System::OnFileChanged));
-        darkmode = followdarkmode && wxSystemSettings::GetAppearance().IsDark();
+        colormask = (followdarkmode && wxSystemSettings::GetAppearance().IsDark()) ? 0x00FFFFFF : 0;
     }
 
     auto NewTabDoc(bool append = false) {

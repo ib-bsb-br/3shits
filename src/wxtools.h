@@ -3,10 +3,12 @@ static void DrawRectangle(wxDC &dc, uint color, int x, int y, int xs, int ys,
     if (outline)
         dc.SetBrush(*wxTRANSPARENT_BRUSH);
     else
-        dc.SetBrush(wxBrush(wxColour(LightColor(color))));
-    dc.SetPen(wxPen(wxColour(LightColor(color))));
+        dc.SetBrush(wxBrush(LightColor(color)));
+    dc.SetPen(wxPen(LightColor(color)));
     dc.DrawRectangle(x, y, xs, ys);
 }
+
+static uint SwapColor(uint c) { return ((c & 0xFF) << 16) | (c & 0xFF00) | ((c & 0xFF0000) >> 16); }
 
 struct DropTarget : wxDropTarget {
     DropTarget(wxDataObject *data) : wxDropTarget(data) {};
@@ -135,7 +137,7 @@ struct ColorDropdown : wxOwnerDrawnComboBox {
         DrawRectangle(dc, item == CUSTOMCOLORIDX ? sys->customcolor : celltextcolors[item],
                       rect.x + 1, rect.y + 1, rect.width - 2, rect.height - 2);
         if (item == CUSTOMCOLORIDX) {
-            dc.SetTextForeground(sys->darkmode ? *wxWHITE : *wxBLACK);
+            dc.SetTextForeground(LightColor(0x000000));
             dc.SetFont(wxFont(9, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL,
                               false, L""));
             dc.DrawText(L"Custom", rect.x + 1, rect.y + 1);
@@ -149,10 +151,7 @@ static uint PickColor(wxWindow *parent, uint defaultcolor) {
     return -1;
 }
 
-static uint LightColor(uint color) {
-    if (sys->darkmode) color ^= 0x00FFFFFF;
-    return color;
-}
+inline static uint LightColor(uint color) { return color ^ sys->colormask; }
 
 #define dd_icon_res_scale 3.0
 

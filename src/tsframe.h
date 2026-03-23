@@ -609,6 +609,9 @@ struct TSFrame : wxFrame {
             A_SINGLETRAY, _(L"Single click maximize from tray"),
             _(L"Toggle whether only one click is required to maximize from system tray"));
         optmenu->Check(A_SINGLETRAY, sys->singletray);
+        optmenu->AppendCheckItem(A_STARTMINIMIZED, _(L"Start minimized"),
+                                 _(L"Start the application minimized"));
+        optmenu->Check(A_STARTMINIMIZED, sys->startminimized);
         optmenu->AppendSeparator();
         optmenu->AppendCheckItem(A_ZOOMSCR, _(L"Swap mousewheel scrolling and zooming"));
         optmenu->Check(A_ZOOMSCR, sys->zoomscroll);
@@ -779,6 +782,13 @@ struct TSFrame : wxFrame {
         // needs to be after Show() to avoid scrollbars rendered in the wrong place?
         if (ismax && !IsIconized()) Maximize(true);
 
+        if (sys->startminimized)
+            #ifdef __WXGTK__
+                CallAfter([this]() { Iconize(true); });
+            #else
+                Iconize(true);
+            #endif
+
         SetFileAssoc(app->exename);
 
         wxSafeYield();
@@ -864,6 +874,7 @@ struct TSFrame : wxFrame {
                        L"cancel_dark.svg");
         AddToolbarIcon(findtb, _(L"Go to Next Search Result"), A_SEARCHNEXT, iconpath,
                        L"search.svg", L"search_dark.svg");
+        findtb->AddStretchSpacer();
         findtb->Realize();
 
         auto repltb = new wxAuiToolBar(this, wxID_ANY, wxDefaultPosition, wxDefaultSize,
@@ -878,26 +889,39 @@ struct TSFrame : wxFrame {
                        L"replace_dark.svg");
         AddToolbarIcon(repltb, _(L"Replace All"), A_REPLACEALL, iconpath, L"replaceall.svg",
                        L"replaceall_dark.svg");
+        repltb->AddStretchSpacer();
         repltb->Realize();
+
+        auto GetColorIndex = [&](int targetcolor, int defaultindex) {
+            for (auto i = 1; i < celltextcolors.size(); ++i) {
+                if (celltextcolors[i] == targetcolor) return i;
+            }
+            if (sys->customcolor == targetcolor) return 0;
+            return defaultindex;
+        };
 
         auto cellcolortb = new wxAuiToolBar(this, wxID_ANY, wxDefaultPosition, wxDefaultSize,
                                             wxAUI_TB_DEFAULT_STYLE | wxAUI_TB_PLAIN_BACKGROUND);
         cellcolortb->AddControl(new wxStaticText(cellcolortb, wxID_ANY, _(L"Cell ")));
-        cellcolordropdown = new ColorDropdown(cellcolortb, A_CELLCOLOR, 1);
+
+        cellcolordropdown =
+            new ColorDropdown(cellcolortb, A_CELLCOLOR, GetColorIndex(sys->lastcellcolor, 1));
         cellcolortb->AddControl(cellcolordropdown);
         cellcolortb->Realize();
 
         auto textcolortb = new wxAuiToolBar(this, wxID_ANY, wxDefaultPosition, wxDefaultSize,
                                             wxAUI_TB_DEFAULT_STYLE | wxAUI_TB_PLAIN_BACKGROUND);
         textcolortb->AddControl(new wxStaticText(textcolortb, wxID_ANY, _(L"Text ")));
-        textcolordropdown = new ColorDropdown(textcolortb, A_TEXTCOLOR, 2);
+        textcolordropdown =
+            new ColorDropdown(textcolortb, A_TEXTCOLOR, GetColorIndex(sys->lasttextcolor, 2));
         textcolortb->AddControl(textcolordropdown);
         textcolortb->Realize();
 
         auto bordercolortb = new wxAuiToolBar(this, wxID_ANY, wxDefaultPosition, wxDefaultSize,
                                               wxAUI_TB_DEFAULT_STYLE | wxAUI_TB_PLAIN_BACKGROUND);
         bordercolortb->AddControl(new wxStaticText(bordercolortb, wxID_ANY, _(L"Border ")));
-        bordercolordropdown = new ColorDropdown(bordercolortb, A_BORDCOLOR, 7);
+        bordercolordropdown =
+            new ColorDropdown(bordercolortb, A_BORDCOLOR, GetColorIndex(sys->lastbordcolor, 7));
         bordercolortb->AddControl(bordercolordropdown);
         bordercolortb->Realize();
 
@@ -1158,6 +1182,7 @@ struct TSFrame : wxFrame {
             case A_MAKEBAKS: sys->cfg->Write(L"makebaks", sys->makebaks = ce.IsChecked()); break;
             case A_TOTRAY: sys->cfg->Write(L"totray", sys->totray = ce.IsChecked()); break;
             case A_MINCLOSE: sys->cfg->Write(L"minclose", sys->minclose = ce.IsChecked()); break;
+            case A_STARTMINIMIZED: sys->cfg->Write(L"startminimized", sys->startminimized = ce.IsChecked()); break;
             case A_ZOOMSCR: sys->cfg->Write(L"zoomscroll", sys->zoomscroll = ce.IsChecked()); break;
             case A_THINSELC: sys->cfg->Write(L"thinselc", sys->thinselc = ce.IsChecked()); break;
             case A_AUTOSAVE: sys->cfg->Write(L"autosave", sys->autosave = ce.IsChecked()); break;
@@ -1182,7 +1207,9 @@ struct TSFrame : wxFrame {
                 break;
             case A_INVERTRENDER:
                 sys->cfg->Write(L"followdarkmode", sys->followdarkmode = ce.IsChecked());
-                sys->darkmode = sys->followdarkmode && wxSystemSettings::GetAppearance().IsDark();
+                sys->colormask = (sys->followdarkmode && wxSystemSettings::GetAppearance().IsDark())
+                                     ? 0x00FFFFFF
+                                     : 0;
                 Refresh();
                 break;
             case A_FULLSCREEN:
@@ -1373,6 +1400,9 @@ struct TSFrame : wxFrame {
         sys->cfg->Write(L"notesizex", sys->notesizex);
         sys->cfg->Write(L"notesizey", sys->notesizey);
         sys->cfg->Write(L"perspective", aui.SavePerspective());
+        sys->cfg->Write(L"lastcellcolor", sys->lastcellcolor);
+        sys->cfg->Write(L"lasttextcolor", sys->lasttextcolor);
+        sys->cfg->Write(L"lastbordcolor", sys->lastbordcolor);
         aui.ClearEventHashTable();
         aui.UnInit();
         DELETEP(editmenupopup);
@@ -1449,7 +1479,8 @@ struct TSFrame : wxFrame {
     }
 
     void OnSysColourChanged(wxSysColourChangedEvent &se) {
-        sys->darkmode = sys->followdarkmode && wxSystemSettings::GetAppearance().IsDark();
+        sys->colormask =
+            (sys->followdarkmode && wxSystemSettings::GetAppearance().IsDark()) ? 0x00FFFFFF : 0;
         auto perspective = aui.SavePerspective();
         RefreshToolBar();
         aui.LoadPerspective(perspective);

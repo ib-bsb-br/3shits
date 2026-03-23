@@ -211,6 +211,9 @@ nfr("is_tag", "", "", "B", "whether the current cell text is a tag",
         return Value(si->IsTag());
     });
 
+nfr("has_image", "", "", "B", "whether the current cell has an image",
+    [](StackPtr &, VM &) { return Value(si->HasImage()); });
+
 nfr("get_column_width", "", "", "I", "get the column width of the current cell",
     [](StackPtr &, VM &) {
         return Value(si->GetColWidth());
@@ -221,6 +224,15 @@ nfr("set_column_width", "width", "I", "", "set the column width of the current c
         si->SetColWidth(w.intval());
         return NilVal();
     });
+
+nfr("remove_image", "", "", "", "remove image in the current cell",
+    [](StackPtr &, VM &) {
+        si->RemoveImage();
+        return NilVal();
+    });
+
+nfr("set_image", "filename", "S", "B", "set image for the current cell",
+    [](StackPtr &, VM &, Value filename) { return Value(si->SetImage(filename.sval()->data())); });
 }
 
 NativeRegistry natreg;  // FIXME: global.

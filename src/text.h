@@ -203,7 +203,7 @@ struct Text {
             else if (filtered)
                 dc.SetPen(*wxLIGHT_GREY_PEN);
             else if (istag)
-                dc.SetPen(wxColour(LightColor(doc->tags[t])));
+                dc.SetPen(wxPen(LightColor(doc->tags[t])));
             else
                 dc.SetPen(sys->pen_tinytext);
         }
@@ -236,14 +236,14 @@ struct Text {
                 else if (filtered)
                     dc.SetTextForeground(*wxLIGHT_GREY);
                 else if (istag)
-                    dc.SetTextForeground(wxColour(LightColor(doc->tags[t])));
+                    dc.SetTextForeground(LightColor(doc->tags[t]));
                 else if (cell->textcolor)
                     dc.SetTextForeground(LightColor(cell->textcolor));  // FIXME: clean up
                 auto tx = bx + 2 + ixs;
                 auto ty = by + lines * h;
                 dc.DrawText(curl, tx + g_margin_extra, ty + g_margin_extra);
                 if (searchfound || filtered || istag || cell->textcolor)
-                    dc.SetTextForeground(sys->darkmode ? *wxWHITE : *wxBLACK);
+                    dc.SetTextForeground(LightColor(0x000000));
             }
             lines++;
         }

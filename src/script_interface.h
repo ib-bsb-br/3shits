@@ -41,6 +41,9 @@ struct ScriptInterface {
     virtual std::string GetFileName() = 0;
     virtual int64_t GetLastEdit() = 0;
     virtual bool IsTag() = 0;
+    virtual bool HasImage() = 0;
+    virtual void RemoveImage() = 0;
+    virtual bool SetImage(std::string_view filename) = 0;
     virtual ~ScriptInterface() {};
 };
 

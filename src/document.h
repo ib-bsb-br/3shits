@@ -422,11 +422,12 @@ struct Document {
         return;
     }
 
-    void ZoomSetDrawPath(int dir, bool fromroot = true) {
-        int len = max(0, (fromroot ? 0 : drawpath.size()) + dir);
-        if (!len && drawpath.empty()) return;
+    bool ZoomSetDrawPath(int dir, bool fromroot = true) {
+        int oldlen = drawpath.size();
+        int targetlen = max(0, (fromroot ? 0 : oldlen) + dir);
+        if (!targetlen && drawpath.empty()) return false;
         if (dir > 0) {
-            if (!selected.grid) return;
+            if (!selected.grid) return false;
             auto c = selected.GetCell();
             CreatePath(c && c->grid ? c : selected.grid->cell, drawpath);
         } else if (dir < 0) {
@@ -434,12 +435,13 @@ struct Document {
             if (drawroot->grid && drawroot->grid->folded)
                 SetSelect(drawroot->parent->grid->FindCell(drawroot));
         }
-        if (auto diff = static_cast<int>(drawpath.size()) - max(0, len); diff > 0)
-            drawpath.erase(drawpath.begin(), drawpath.begin() + diff);
+        int tail = static_cast<int>(drawpath.size()) - targetlen;
+        if (tail > 0) drawpath.erase(drawpath.begin(), drawpath.begin() + tail);
+        return drawpath.size() != oldlen;
     }
 
     void Zoom(int dir, bool fromroot = false) {
-        ZoomSetDrawPath(dir, fromroot);
+        if (!ZoomSetDrawPath(dir, fromroot)) return;
         auto drawroot = WalkPath(drawpath);
         if (selected.GetCell() == drawroot && drawroot->grid) {
             // We can't have the drawroot selected, so we must move the selection to the children.
@@ -467,6 +469,7 @@ struct Document {
                 selected.grid->cell->ResetChildren();
                 paintscrolltoselection = true;
                 canvas->Refresh();
+                sys->frame->UpdateStatus(selected, false);
                 return dir > 0 ? _(L"Column width increased.") : _(L"Column width decreased.");
             }
             return L"nothing to resize";
@@ -531,7 +534,7 @@ struct Document {
                 }
                 dc.DrawText(s, off, off);
             }
-        dc.SetTextForeground(sys->darkmode ? *wxWHITE : *wxBLACK);
+        dc.SetTextForeground(LightColor(0x000000));
         currentdrawroot->Render(this, hierarchysize, hierarchysize, dc, 0, 0, 0, 0, 0,
                                 currentdrawroot->ColWidth(), 0);
     }
@@ -551,7 +554,7 @@ struct Document {
         if (!root) return;
         canvas->GetClientSize(&maxx, &maxy);
         Layout(dc);
-        dc.SetBackground(wxBrush(wxColor(LightColor(Background()))));
+        dc.SetBackground(wxBrush(LightColor(Background())));
         dc.Clear();
         double xscale = maxx / static_cast<double>(layoutxs);
         double yscale = maxy / static_cast<double>(layoutys);
@@ -584,12 +587,16 @@ struct Document {
         Render(dc);
         DrawSelect(dc, selected);
         if (paintscrolltoselection) {
-            wxTheApp->CallAfter([this](){
+            #ifdef __WXGTK__
                 ScrollIfSelectionOutOfView(selected);
-                #ifdef __WXMAC__
-                    canvas->Refresh();
-                #endif
-            });
+            #else
+                canvas->CallAfter([this](){
+                    ScrollIfSelectionOutOfView(selected);
+                    #ifdef __WXMAC__
+                        canvas->Refresh();
+                    #endif
+                });
+            #endif
             paintscrolltoselection = false;
         }
         if (scaledviewingmode) { dc.SetUserScale(1, 1); }
@@ -732,22 +739,27 @@ struct Document {
                 case A_EXPHTMLTI:
                 case A_EXPHTMLTE:
                 case A_EXPHTMLB:
-                case A_EXPHTMLO:
-                    dos.WriteString(
-                        L"<!DOCTYPE html>\n"
-                        L"<html>\n<head>\n<style>\n"
-                        L"body { font-family: sans-serif; }\n"
-                        L"table, th, td { border: 1px solid #A0A0A0; border-collapse: collapse;"
-                        L" padding: 3px; vertical-align: top; }\n"
-                        L"li { }\n</style>\n"
-                        L"<title>export of TreeSheets file ");
-                    dos.WriteString(this->filename);
-                    dos.WriteString(
-                        L"</title>\n<meta charset=\"UTF-8\" />\n"
-                        L"</head>\n<body>\n");
-                    dos.WriteString(content);
-                    dos.WriteString(L"</body>\n</html>\n");
+                case A_EXPHTMLO: {
+                    wxString output;
+                    output
+                        << L"<!DOCTYPE html>\n"
+                        << L"<html>\n<head>\n<style>\n"
+                        << L"body { font-family: '" << sys->defaultfont << L"', sans-serif; }\n"
+                        << L"table, th, td { border: 1px solid #A0A0A0; border-collapse: collapse;"
+                        << L" padding: 3px; vertical-align: top; }\n"
+                        << L"@media (prefers-color-scheme: dark) {\n"
+                        << L"  html { filter: invert(1); }\n"
+                        << L"  img { filter: invert(1); }\n"
+                        << L"}\n"
+                        << L"li { }\n</style>\n"
+                        << L"<title>export of TreeSheets file " << this->filename
+                        << L"</title>\n<meta charset=\"UTF-8\" />\n"
+                        << L"</head>\n<body style=\""
+                        << wxString::Format(L"background-color: #%06X;", SwapColor(root->cellcolor))
+                        << L"\">" << content << L"</body>\n</html>\n";
+                    dos.WriteString(output);
                     break;
+                }
                 case A_EXPCSV:
                 case A_EXPTEXT: dos.WriteString(content); break;
             }
@@ -1396,30 +1408,27 @@ struct Document {
 
             case A_SCLEFT:
             case A_SCRIGHT:
-                if (!selected.TextEdit() && action == A_SCLEFT) {
-                    selected.xs = selected.Thin() ? selected.x : selected.x + 1;
-                    selected.x = 0;
-                    canvas->Refresh();
-                    return nullptr;
-                }
-                if (!selected.TextEdit() && action == A_SCRIGHT) {
-                    selected.xs = selected.grid->xs - selected.x;
-                    canvas->Refresh();
-                    return nullptr;
-                }
-                selected.Cursor(this, action - A_SCUP + A_UP, true, true);
-                return nullptr;
-
             case A_SCUP:
             case A_SCDOWN:
-                if (!selected.TextEdit() && action == A_SCUP) {
-                    selected.ys = selected.Thin() ? selected.y : selected.y + 1;
-                    selected.y = 0;
+                if (!selected.TextEdit()) {
+                    bool horiz = (action == A_SCLEFT || action == A_SCRIGHT);
+                    bool ismin = (action == A_SCLEFT || action == A_SCUP);
+
+                    int &pos = horiz ? selected.x : selected.y;
+                    int &ext = horiz ? selected.xs : selected.ys;
+                    int gridmax = horiz ? selected.grid->xs : selected.grid->ys;
+
+                    if (ismin) {
+                        ext = pos + (selected.Thin() ? 0 : 1);
+                        pos = 0;
+                    } else {
+                        ext = gridmax - pos;
+                    }
+
+                    sys->frame->UpdateStatus(selected, true);
                     canvas->Refresh();
-                }
-                if (!selected.TextEdit() && action == A_SCDOWN) {
-                    selected.ys = selected.grid->ys - selected.y;
-                    canvas->Refresh();
+                } else if (action == A_SCLEFT || action == A_SCRIGHT) {
+                    selected.Cursor(this, action - A_SCUP + A_UP, true, true);
                 }
                 return nullptr;
 
@@ -1660,6 +1669,7 @@ struct Document {
                 }
                 selected.grid->cell->ResetChildren();
                 canvas->Refresh();
+                sys->frame->UpdateStatus(selected, false);
                 return nullptr;
 
             case A_MINISIZE: {

@@ -176,7 +176,7 @@ struct Cell {
                                         tys + cell_margin * 2 + g_margin_extra, sys->roundness);
             // FIXME: this half a g_margin_extra is a bit of hack
         }
-        dc.SetTextBackground(wxColour(LightColor(actualcellcolor)));
+        dc.SetTextBackground(LightColor(actualcellcolor));
         int xoff = verticaltextandgrid ? 0 : text.extent - depth * dc.GetCharHeight();
         int yoff = text.Render(doc, bx, by + ycenteroff, depth, dc, xoff, maxcolwidth);
         yoff = verticaltextandgrid ? yoff : 0;
@@ -190,8 +190,8 @@ struct Cell {
             points[0] = wxPoint(right, top);
             points[1] = wxPoint(right, top + size);
             points[2] = wxPoint(right - size, top);
-            dc.SetBrush(wxColour(LightColor(textcolor)));
-            dc.SetPen(wxColour(LightColor(textcolor)));
+            dc.SetBrush(wxBrush(LightColor(textcolor)));
+            dc.SetPen(wxPen(LightColor(textcolor)));
             dc.DrawPolygon(3, points);
         }
     }
@@ -227,7 +227,6 @@ struct Cell {
         return c->parent == this || (c->parent && IsParentOf(c->parent));
     }
 
-    uint SwapColor(uint c) { return ((c & 0xFF) << 16) | (c & 0xFF00) | ((c & 0xFF0000) >> 16); }
     wxString ToText(int indent, const Selection &sel, int format, Document *doc, bool inheritstyle,
                     Cell *root) {
         wxString str = text.ToText(indent, sel, format);
@@ -291,9 +290,11 @@ struct Cell {
                 style +=
                     text.stylebits & STYLE_ITALIC ? L"font-style: italic;" : L"font-style: normal;";
             if (!inheritstyle || !parent ||
-                (text.stylebits & STYLE_FIXED) != (parent->text.stylebits & STYLE_FIXED))
-                style += text.stylebits & STYLE_FIXED ? L"font-family: monospace;"
-                                                      : L"font-family: sans-serif;";
+                (text.stylebits & STYLE_FIXED) != (parent->text.stylebits & STYLE_FIXED)) {
+                style += L"font-family: '";
+                style += text.stylebits & STYLE_FIXED ? sys->defaultfixedfont + L"', monospace;"
+                                                      : sys->defaultfont + L"', sans-serif;";
+            }
             if (!inheritstyle || cellcolor != (parent ? parent->cellcolor : doc->Background()))
                 style += wxString::Format(L"background-color: #%06X;", SwapColor(cellcolor));
             auto exporttextcolor = IsTag(doc) ? doc->tags[text.t] : textcolor;
@@ -385,7 +386,9 @@ struct Cell {
 
     Cell *LoadGrid(wxDataInputStream &dis, int &numcells, int &textbytes, Cell *&ics) {
         int xs = dis.Read32();
-        auto g = new Grid(xs, dis.Read32());
+        int ys = dis.Read32();
+        if (xs <= 0 || ys <= 0 || (int64_t)xs * (int64_t)ys > INT_MAX) return nullptr;
+        auto g = new Grid(xs, ys);
         grid = g;
         g->cell = this;
         if (!g->LoadContents(dis, numcells, textbytes, ics)) return nullptr;
