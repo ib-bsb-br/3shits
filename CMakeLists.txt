@@ -40,7 +40,14 @@ endif()
 ### Thirdparty dependencies
 
 include(FetchContent)
+FetchContent_Declare(
+    fault
+    GIT_REPOSITORY https://github.com/Ridrik/fault.git
+    GIT_TAG v0.5.0
+)
+FetchContent_MakeAvailable(fault)
 
+include(FetchContent)
 FetchContent_Declare(
     wxwidgets
     GIT_REPOSITORY https://github.com/wxWidgets/wxWidgets
@@ -134,6 +141,7 @@ endif()
 target_precompile_headers(TreeSheets PUBLIC src/stdafx.h)
 
 ## Link wxWidgets and lobster-impl into TreeSheets
+set(TREESHEETS_LIBS fault::fault wx::aui wx::adv wx::core wx::xml wx::net)
 if(ENABLE_LOBSTER)
     target_link_libraries(TreeSheets PRIVATE lobster-impl)
 endif(ENABLE_LOBSTER)
@@ -144,7 +152,7 @@ target_link_libraries(TreeSheets PRIVATE wx::aui wx::adv wx::core wx::xml wx::ne
 ## Platform specific installation paths
 
 if(LINUX OR BSD)
-    OPTION(TREESHEETS_RELOCATABLE_INSTALLATION "Install data relative to the TreeSheets binary, instead of respecting the Filesystem Hierarchy Standard" OFF)
+    OPTION(TREESHEETS_RELOCATABLE_INSTALLATION "Install data relative to the TreeSheets binary, instead of respecting the Filesystem Hierarchy Standard" ON)
 endif()
 
 if((LINUX OR BSD) AND NOT TREESHEETS_RELOCATABLE_INSTALLATION)
@@ -212,46 +220,6 @@ if(APPLE)
         FILES "platform/osx/App.icns"
         DESTINATION "TreeSheets.app/Contents/Resources"
     )
-endif()
-
-## Localization
-
-# Install translations to correct platform-specific path.
-# See: https://docs.wxwidgets.org/trunk/overview_i18n.html#overview_i18n_mofiles
-file(
-    GLOB locales
-    LIST_DIRECTORIES true
-    RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}/TS/translations
-    TS/translations/*/ts.mo
-)
-list(
-    TRANSFORM locales
-    REPLACE "/ts\\.mo$" ""
-)
-if(WIN32 OR TREESHEETS_RELOCATABLE_INSTALLATION)
-    foreach(locale ${locales})
-        install(
-            FILES "TS/translations/${locale}/ts.mo"
-            # Paths must be relative to use with CPack
-            DESTINATION "translations/${locale}"
-        )
-    endforeach()
-elseif(APPLE)
-    foreach(locale ${locales})
-        install(
-            FILES "TS/translations/${locale}/ts.mo"
-            # Paths must be relative to use with CPack
-            DESTINATION "TreeSheets.app/Contents/Resources/translations/${locale}.lproj"
-        )
-    endforeach()
-else()
-    # Falling back to GNU scheme
-    foreach(locale ${locales})
-        install(
-            FILES "TS/translations/${locale}/ts.mo"
-            DESTINATION "${CMAKE_INSTALL_LOCALEDIR}/${locale}/LC_MESSAGES"
-        )
-    endforeach()
 endif()
 
 ### Packaging with CPack
