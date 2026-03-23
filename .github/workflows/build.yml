@@ -36,6 +36,9 @@ jobs:
       - name: apt update
         run: sudo apt-get -o Acquire::Retries=3 update
 
+      - name: Install C++ Stacktrace deps (fault/cpptrace)
+        run: sudo apt-get -o Acquire::Retries=3 install libunwind-dev libdw-dev
+
       - name: Install OpenGL deps
         run: sudo apt-get -o Acquire::Retries=3 install mesa-common-dev libgl1-mesa-dev libgl1 libglx-mesa0 libxext-dev
 
