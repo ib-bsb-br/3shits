@@ -1,3 +1,5 @@
+#include <fault/core.hpp>
+
 struct IPCServer : wxServer {
     wxConnectionBase *OnAcceptConnection(const wxString &topic) {
         sys->frame->DeIconize();
@@ -73,9 +75,9 @@ struct TSApp : wxApp {
         }
 
         wxStandardPaths::Get().SetFileLayout(wxStandardPathsBase::FileLayout_XDG);
+        InitializeFaultHandling();
         sys = new System(portable);
         if (start_minimized) sys->startminimized = true;
-        SetupInternationalization();
         frame = new TSFrame(this);
 
         #ifdef ENABLE_LOBSTER
@@ -125,6 +127,23 @@ struct TSApp : wxApp {
         return 0;
     }
 
+    void InitializeFaultHandling() {
+        std::filesystem::path crash_dir =
+            std::filesystem::path(exepath.ToStdString()) / "crash-reports";
+
+        const auto initialized = fault::init({
+            .appName = "TreeSheets",
+            .buildID = PACKAGE_VERSION,
+            .crashDir = crash_dir.string(),
+            .resolveNonSignalTrace = true,
+            .showPopUp = false,
+        });
+
+        if (!initialized) {
+            wxLogWarning(L"fault initialization failed; continuing without crash reports.");
+        }
+    }
+
     wxString GetExecutablePath() {
         wxString executablepath = argv[0];
         #if defined(__WXMAC__)
@@ -142,27 +161,6 @@ struct TSApp : wxApp {
             }
         #endif
         return executablepath;
-    }
-
-    void SetupInternationalization() {
-        wxUILocale::UseDefault();
-
-        #ifdef __WXGTK__
-            wxFileTranslationsLoader::AddCatalogLookupPathPrefix(L"/usr");
-            wxFileTranslationsLoader::AddCatalogLookupPathPrefix(L"/usr/local");
-            #ifdef LOCALEDIR
-                wxFileTranslationsLoader::AddCatalogLookupPathPrefix(LOCALEDIR);
-            #endif
-            wxString prefix = wxStandardPaths::Get().GetInstallPrefix();
-            wxFileTranslationsLoader::AddCatalogLookupPathPrefix(prefix);
-        #endif
-        wxFileTranslationsLoader::AddCatalogLookupPathPrefix(GetDataPath("translations"));
-
-        auto trans = new wxTranslations();
-        trans->SetLanguage(sys->defaultlang);
-        trans->AddCatalog(L"ts");
-
-        wxTranslations::Set(trans);
     }
 
     wxString GetDataPath(const wxString &relpath) {

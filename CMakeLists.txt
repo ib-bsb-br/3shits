@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.25)
 
+if(POLICY CMP0177)
+    cmake_policy(SET CMP0177 NEW)
+endif()
+
 ### Project
 
 set(TREESHEETS_VERSION "" CACHE STRING "Version string (e.g., 1.2.3). Leave empty for auto-timestamp.")
@@ -40,6 +44,16 @@ endif()
 ### Thirdparty dependencies
 
 include(FetchContent)
+
+set(FAULT_BUILD_SHARED OFF CACHE BOOL "Build fault as static library for packaging coherence" FORCE)
+
+FetchContent_Declare(
+    fault
+    GIT_REPOSITORY https://github.com/Ridrik/fault
+    GIT_TAG v0.5.0
+    GIT_SHALLOW ON
+)
+FetchContent_MakeAvailable(fault)
 
 FetchContent_Declare(
     wxwidgets
@@ -138,13 +152,14 @@ if(ENABLE_LOBSTER)
     target_link_libraries(TreeSheets PRIVATE lobster-impl)
 endif(ENABLE_LOBSTER)
 target_link_libraries(TreeSheets PRIVATE wx::aui wx::adv wx::core wx::xml wx::net)
+target_link_libraries(TreeSheets PRIVATE fault::fault)
 
 ### Installation
 
 ## Platform specific installation paths
 
 if(LINUX OR BSD)
-    OPTION(TREESHEETS_RELOCATABLE_INSTALLATION "Install data relative to the TreeSheets binary, instead of respecting the Filesystem Hierarchy Standard" OFF)
+    OPTION(TREESHEETS_RELOCATABLE_INSTALLATION "Install data relative to the TreeSheets binary, instead of respecting the Filesystem Hierarchy Standard" ON)
 endif()
 
 if((LINUX OR BSD) AND NOT TREESHEETS_RELOCATABLE_INSTALLATION)
@@ -158,7 +173,6 @@ if((LINUX OR BSD) AND NOT TREESHEETS_RELOCATABLE_INSTALLATION)
 
     # Convert relative to absolute paths because only absolute paths are looked up on Linux (and BSD)
     target_compile_definitions(TreeSheets PRIVATE
-        "LOCALEDIR=L\"${CMAKE_INSTALL_FULL_LOCALEDIR}\""
         "TREESHEETS_DOCDIR=\"${TREESHEETS_FULL_DOCDIR}\""
         "TREESHEETS_DATADIR=\"${TREESHEETS_FULL_PKGDATADIR}\""
     )
@@ -214,46 +228,6 @@ if(APPLE)
     )
 endif()
 
-## Localization
-
-# Install translations to correct platform-specific path.
-# See: https://docs.wxwidgets.org/trunk/overview_i18n.html#overview_i18n_mofiles
-file(
-    GLOB locales
-    LIST_DIRECTORIES true
-    RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}/TS/translations
-    TS/translations/*/ts.mo
-)
-list(
-    TRANSFORM locales
-    REPLACE "/ts\\.mo$" ""
-)
-if(WIN32 OR TREESHEETS_RELOCATABLE_INSTALLATION)
-    foreach(locale ${locales})
-        install(
-            FILES "TS/translations/${locale}/ts.mo"
-            # Paths must be relative to use with CPack
-            DESTINATION "translations/${locale}"
-        )
-    endforeach()
-elseif(APPLE)
-    foreach(locale ${locales})
-        install(
-            FILES "TS/translations/${locale}/ts.mo"
-            # Paths must be relative to use with CPack
-            DESTINATION "TreeSheets.app/Contents/Resources/translations/${locale}.lproj"
-        )
-    endforeach()
-else()
-    # Falling back to GNU scheme
-    foreach(locale ${locales})
-        install(
-            FILES "TS/translations/${locale}/ts.mo"
-            DESTINATION "${CMAKE_INSTALL_LOCALEDIR}/${locale}/LC_MESSAGES"
-        )
-    endforeach()
-endif()
-
 ### Packaging with CPack
 
 set(CPACK_PACKAGE_VENDOR "Wouter van Oortmerssen")
@@ -274,8 +248,7 @@ elseif(WIN32)
     set(CPACK_INNOSETUP_RUN_EXECUTABLES "TreeSheets")
     set(CPACK_INNOSETUP_PACKAGE_NAME ${CMAKE_PROJECT_NAME})
     set(CPACK_INNOSETUP_LANGUAGES
-        "brazilianPortuguese" "english" "french" "german" 
-        "italian" "korean" "russian"
+        "english"
     )
     set(CPACK_INNOSETUP_SETUP_PrivilegesRequired "lowest")
     set(CPACK_INNOSETUP_IGNORE_README_PAGE ON)

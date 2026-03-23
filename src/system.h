@@ -8,7 +8,6 @@ struct System {
         #endif
     };
     wxString defaultfixedfont {L"Courier New"};
-    wxString defaultlang {wxEmptyString};
     wxString searchstring;
     unique_ptr<wxConfigBase> cfg;
     Evaluator evaluator;
@@ -78,7 +77,6 @@ struct System {
         autohtmlexport = static_cast<int>(cfg->Read(L"autohtmlexport", autohtmlexport));
         defaultfont = cfg->Read(L"defaultfont", defaultfont);
         defaultfixedfont = cfg->Read(L"defaultfixedfont", defaultfixedfont);
-        defaultlang = cfg->Read(L"defaultlang", defaultlang);
         cfg->Read(L"defaultmaxcolwidth", &defaultmaxcolwidth, defaultmaxcolwidth);
         cfg->Read(L"makebaks", &makebaks, makebaks);
         cfg->Read(L"totray", &totray, totray);
@@ -140,23 +138,7 @@ struct System {
         every_second_timer.Start(1000);
     }
 
-    void LoadTutorial() {
-        auto trans = wxTranslations::Get();
-        auto language = trans ? trans->GetBestTranslation(L"ts") : wxString(L"");
-
-        if (language.Len() == 5 &&
-            !LoadDB(frame->app->GetDocPath(L"examples/tutorial-" + language + ".cts"))[0]) {
-            return;
-        }
-
-        language.Truncate(2);
-        if (language.Len() == 2 &&
-            !LoadDB(frame->app->GetDocPath(L"examples/tutorial-" + language + ".cts"))[0]) {
-            return;
-        }
-
-        LoadDB(frame->app->GetDocPath(L"examples/tutorial.cts"));
-    }
+    void LoadTutorial() { LoadDB(frame->app->GetDocPath(L"examples/tutorial.cts")); }
 
     void LoadOpRef() { LoadDB(frame->app->GetDocPath(L"examples/operation-reference.cts")); }
 
