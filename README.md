@@ -81,6 +81,22 @@ cd treesheets
 
 If you do not have `wxWidgets` installed, you may want to set `wxBUILD_INSTALL` and `wxBUILD_SHARED` to off in the build configuration. This ensures a TreeSheets build with wxWidgets libraries statically linked in.
 
+### Debian 11 ARM64 / RK3588 deployment helper
+
+For constrained Debian 11 ARM64 systems (for example RK3588 boards), this repository also includes an optional deployment helper script:
+
+```sh
+./treesheets-deploy.sh
+```
+
+This script combines:
+
+- normal CMake/CPack packaging flow;
+- verbose build logs persisted to disk for easier diagnosis of hidden parallel-build errors;
+- automatic retry with `-DENABLE_LOBSTER=OFF` if a Lobster-enabled build fails, so package generation can still complete on older toolchains.
+
+Note: CMake already contains a guarded GCC `< 11` Lobster compatibility patch. The script complements that by adding stronger diagnostics and a practical fallback path for end-to-end deployment.
+
 Contributing
 ------------
 I welcome contributions, especially in the form of neatly prepared pull requests. The main thing to keep in mind when
