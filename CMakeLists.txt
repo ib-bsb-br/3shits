@@ -1,4 +1,7 @@
 cmake_minimum_required(VERSION 3.25)
+if(POLICY CMP0177)
+    cmake_policy(SET CMP0177 NEW)
+endif()
 
 ### Project
 
@@ -65,6 +68,46 @@ if(ENABLE_LOBSTER)
         GIT_SHALLOW ON
     )
     FetchContent_MakeAvailable(lobster)
+
+    # Debian 11 ships GCC 10, which advertises __cpp_lib_to_chars support for
+    # floating-point parsing but lacks std::from_chars(double). Lobster uses
+    # this feature-test macro and will fail to compile in that environment.
+    # Patch Lobster sources during configure to force the fallback strtod path.
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 11)
+        file(GLOB_RECURSE lobster_to_chars_sources
+            "${lobster_SOURCE_DIR}/dev/src/*.h"
+            "${lobster_SOURCE_DIR}/dev/src/*.hpp"
+            "${lobster_SOURCE_DIR}/dev/src/*.hh"
+            "${lobster_SOURCE_DIR}/dev/src/*.c"
+            "${lobster_SOURCE_DIR}/dev/src/*.cc"
+            "${lobster_SOURCE_DIR}/dev/src/*.cpp"
+            "${lobster_SOURCE_DIR}/dev/src/*.cxx"
+            "${lobster_SOURCE_DIR}/dev/src/*.inl"
+            "${lobster_SOURCE_DIR}/dev/src/*.ipp"
+            "${lobster_SOURCE_DIR}/dev/include/*.h"
+            "${lobster_SOURCE_DIR}/dev/include/*.hpp"
+            "${lobster_SOURCE_DIR}/dev/include/*.hh"
+        )
+        set(lobster_to_chars_patch_count 0)
+        foreach(lobster_source IN LISTS lobster_to_chars_sources)
+            file(READ "${lobster_source}" lobster_source_content)
+            if(lobster_source_content MATCHES "__cpp_lib_to_chars")
+                string(REPLACE "__cpp_lib_to_chars" "LOBSTER_DISABLE_TO_CHARS"
+                    lobster_patched_source_content "${lobster_source_content}")
+                if(NOT lobster_patched_source_content STREQUAL lobster_source_content)
+                    file(WRITE "${lobster_source}" "${lobster_patched_source_content}")
+                    math(EXPR lobster_to_chars_patch_count "${lobster_to_chars_patch_count} + 1")
+                endif()
+            endif()
+        endforeach()
+        if(lobster_to_chars_patch_count GREATER 0)
+            message(STATUS
+                "Patched ${lobster_to_chars_patch_count} Lobster files to bypass GCC < 11 to_chars/from_chars limitations")
+        else()
+            message(WARNING
+                "GCC < 11 detected but no Lobster __cpp_lib_to_chars references were patched")
+        endif()
+    endif()
 endif()
 
 ### Options
