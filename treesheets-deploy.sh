@@ -113,7 +113,15 @@ if ! sudo apt-get -o Acquire::Retries=3 update; then
 fi
 
 ensure_pkg_installed "build-essential"
-ensure_tool_installed "cmake"
+116:ensure_tool_installed "cmake"
+117:
+118:REQUIRED_CMAKE_VERSION="3.25"
+119:CURRENT_CMAKE_VERSION=$(cmake --version | head -n1 | cut -d' ' -f3)
+120:if [ "$(printf '%s\n%s' "$REQUIRED_CMAKE_VERSION" "$CURRENT_CMAKE_VERSION" | sort -V | head -n1)" != "$REQUIRED_CMAKE_VERSION" ]; then
+121:    echo "Error: CMake version $REQUIRED_CMAKE_VERSION or higher is required (found $CURRENT_CMAKE_VERSION)."
+122:    echo "Please install a newer version via backports or Kitware's APT repository."
+123:    exit 1
+124:fi
 ensure_tool_installed "git"
 ensure_tool_installed "gettext"
 ensure_pkg_installed "libunwind-dev"
