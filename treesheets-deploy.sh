@@ -10,8 +10,8 @@ set -euo pipefail
 #              Lobster disabled if the full build fails.
 # ==============================================================================
 
-REPO_URL="https://github.com/ib-bsb-br/3shits.git"
-BUILD_DIR_NAME="3shits"
+REPO_URL="https://github.com/aardappel/treesheets.git"
+BUILD_DIR_NAME="treesheets"
 CMAKE_BUILD_DIR="_build"
 TREESHEETS_VERSION="1.0.0"
 KIOSK_USER="treesheets_user"
@@ -73,9 +73,9 @@ report_lobster_patch_state() {
         return 1
     fi
 
-    if rg -q "LOBSTER_DISABLE_TO_CHARS" "$lobster_dir"; then
+    if grep -r -q "LOBSTER_DISABLE_TO_CHARS" "$lobster_dir"; then
         local patched_count
-        patched_count=$(rg -l "LOBSTER_DISABLE_TO_CHARS" "$lobster_dir" | wc -l)
+        patched_count=$(grep -r -l "LOBSTER_DISABLE_TO_CHARS" "$lobster_dir" | wc -l || true)
         echo "--> CMake GCC-compat patch detected in Lobster source (${patched_count} file(s))."
     else
         echo "--> No Lobster macro rewrites detected (expected on GCC >= 11)."
@@ -122,7 +122,7 @@ ensure_pkg_installed "zenity"
 # Ruby environment for fpm packaging
 ensure_tool_installed "ruby"
 ensure_pkg_installed "ruby-dev"
-ensure_tool_installed "gem" "rubygems"
+ensure_tool_installed "gem" "ruby"
 
 if ! command -v fpm >/dev/null 2>&1; then
     echo "Installing fpm..."
@@ -240,7 +240,7 @@ User=$KIOSK_USER
 Group=$KIOSK_USER
 PAMName=login
 Environment=\"DISPLAY=:0\"
-ExecStart=/usr/bin/xinit /usr/bin/treesheets -- :0 -nolisten tcp vt1
+ExecStart=/usr/bin/xinit /usr/bin/TreeSheets -- :0 -nolisten tcp vt1
 Restart=always
 RestartSec=5
 
