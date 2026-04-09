@@ -2,269 +2,259 @@
 set -euo pipefail
 
 # ==============================================================================
-# Script: Install and Deploy TreeSheets on VPC-3588 (RK3588)
-# Target: Debian 11 (Bullseye) ARM64 (aarch64) - bare-metal
-# Description: Automates host dependency setup, native compilation, Debian
-# packaging, optional installation, and optional kiosk setup.
+# Script: TreeSheets kiosk deployer for Debian 13 (x86_64, tty-only)
 #
-# Design notes:
-# - Primary GCC 10 / Lobster charconv fix lives in CMakeLists.txt.
-# - Script keeps a verified patch fallback in case the source tree predates that fix.
-# - Build uses verbose logs and exposes root cause on failure.
+# What this script does:
+#   1) Installs Xorg/X11 + ratpoison + runtime dependencies.
+#   2) Downloads the latest TreeSheets Linux x86_64 release artifact from GitHub
+#      (prefers .deb, then AppImage, then tar.*).
+#   3) Installs TreeSheets under /usr/local/bin/treesheets.
+#   4) Creates/updates a non-root kiosk user with sudo privileges.
+#   5) Configures tty1 autologin -> startx -> ratpoison -> TreeSheets kiosk.
+#
+# Kiosk constraints implemented:
+#   - TreeSheets is always started with: -p -i
 # ==============================================================================
 
-REPO_URL="https://github.com/ib-bsb-br/3shits.git"
-BUILD_DIR_NAME="3shits"
-CMAKE_BUILD_DIR="_build"
-TREESHEETS_VERSION="1.0.0"
-KIOSK_USER="treesheets_user"
-KIOSK_SERVICE_FILE="/etc/systemd/system/treesheets-kiosk.service"
-BUILD_LOG_FILE=""
+TREE_OWNER="${TREE_OWNER:-aardappel}"
+TREE_REPO="${TREE_REPO:-treesheets}"
+GITHUB_API_URL="https://api.github.com/repos/${TREE_OWNER}/${TREE_REPO}/releases/latest"
+KIOSK_USER="${KIOSK_USER:-treesheets}"
+KIOSK_HOME="/home/${KIOSK_USER}"
+TREE_INSTALL_DIR="/opt/treesheets"
+TREE_BINARY_LINK="/usr/local/bin/treesheets"
+WORK_DIR="${WORK_DIR:-/tmp/treesheets-deploy}"
 
-WORK_DIR="$HOME"
-SRC_DIR="$WORK_DIR/$BUILD_DIR_NAME"
+log() {
+    echo "[treesheets-deploy] $*"
+}
 
-ensure_pkg_installed() {
-    local pkg_name="$1"
-    if ! dpkg -s "$pkg_name" >/dev/null 2>&1; then
-        echo "--> Package '$pkg_name' is missing. Installing..."
-        sudo apt-get -o Acquire::Retries=3 install -y "$pkg_name"
+require_cmd() {
+    local cmd="$1"
+    local pkg="${2:-$1}"
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        log "Installing missing command '$cmd' via package '$pkg'."
+        sudo apt-get install -y "$pkg"
+    fi
+}
+
+install_base_packages() {
+    log "Updating APT index..."
+    sudo apt-get update
+
+    log "Installing base packages for Debian 13 kiosk setup..."
+    sudo apt-get install -y \
+        curl ca-certificates python3 \
+        xorg xinit x11-xserver-utils ratpoison dbus-x11 \
+        fonts-dejavu-core \
+        libgtk-3-0 libgl1 libx11-6 libxext6 libxrandr2 libxinerama1 libxi6 libxcursor1
+}
+
+fetch_latest_asset() {
+    local release_json="$WORK_DIR/latest-release.json"
+
+    mkdir -p "$WORK_DIR"
+
+    log "Querying latest release metadata from ${TREE_OWNER}/${TREE_REPO}..."
+    curl -fsSL "$GITHUB_API_URL" -o "$release_json"
+
+    python3 - "$release_json" <<'PY'
+import json
+import re
+import sys
+from pathlib import Path
+
+release_path = Path(sys.argv[1])
+release = json.loads(release_path.read_text(encoding="utf-8"))
+assets = release.get("assets", [])
+
+# Prefer Linux x86_64/amd64 assets in this order.
+patterns = [
+    re.compile(r"(linux|debian|ubuntu).*(amd64|x86_64).*\.deb$", re.I),
+    re.compile(r"(amd64|x86_64).*(linux|debian|ubuntu).*\.deb$", re.I),
+    re.compile(r"(linux).*(amd64|x86_64).*\.appimage$", re.I),
+    re.compile(r"(amd64|x86_64).*(linux).*\.appimage$", re.I),
+    re.compile(r"(linux).*(amd64|x86_64).*(\.tar\.gz|\.tgz|\.tar\.xz)$", re.I),
+    re.compile(r"(amd64|x86_64).*(linux).*(\.tar\.gz|\.tgz|\.tar\.xz)$", re.I),
+]
+
+chosen = None
+for pat in patterns:
+    for a in assets:
+        name = a.get("name", "")
+        if pat.search(name):
+            chosen = a
+            break
+    if chosen:
+        break
+
+# Fallback: any linux appimage or deb.
+if not chosen:
+    for a in assets:
+        name = a.get("name", "")
+        if re.search(r"(linux).*(\.deb|\.appimage)$", name, re.I):
+            chosen = a
+            break
+
+if not chosen:
+    print("", end="")
+    sys.exit(0)
+
+print(chosen["name"])
+print(chosen["browser_download_url"])
+print(release.get("tag_name", "unknown"))
+PY
+}
+
+install_treesheets_from_asset() {
+    local asset_name="$1"
+    local asset_url="$2"
+    local release_tag="$3"
+    local downloaded="$WORK_DIR/$asset_name"
+
+    if [[ -z "$asset_name" || -z "$asset_url" ]]; then
+        log "ERROR: Could not locate a suitable Linux x86_64 release asset."
+        exit 1
+    fi
+
+    log "Latest release tag: ${release_tag}"
+    log "Downloading asset: ${asset_name}"
+    curl -fL "$asset_url" -o "$downloaded"
+
+    sudo mkdir -p "$TREE_INSTALL_DIR"
+
+    case "$asset_name" in
+        *.deb)
+            log "Installing .deb package..."
+            sudo dpkg -i "$downloaded" || sudo apt-get install -f -y
+            ;;
+        *.AppImage|*.appimage)
+            log "Installing AppImage into ${TREE_INSTALL_DIR}/TreeSheets.AppImage"
+            sudo install -m 0755 "$downloaded" "$TREE_INSTALL_DIR/TreeSheets.AppImage"
+            ;;
+        *.tar.gz|*.tgz|*.tar.xz)
+            log "Extracting tar archive into ${TREE_INSTALL_DIR}"
+            sudo rm -rf "$TREE_INSTALL_DIR/extracted"
+            sudo mkdir -p "$TREE_INSTALL_DIR/extracted"
+            sudo tar -xf "$downloaded" -C "$TREE_INSTALL_DIR/extracted"
+            ;;
+        *)
+            log "ERROR: Unsupported asset format: $asset_name"
+            exit 1
+            ;;
+    esac
+
+    # Resolve runtime executable path and expose stable launcher symlink.
+    local resolved_bin=""
+
+    if command -v TreeSheets >/dev/null 2>&1; then
+        resolved_bin="$(command -v TreeSheets)"
+    elif [[ -x "$TREE_INSTALL_DIR/TreeSheets.AppImage" ]]; then
+        resolved_bin="$TREE_INSTALL_DIR/TreeSheets.AppImage"
     else
-        echo "--> Package '$pkg_name' is already installed."
+        resolved_bin="$(find "$TREE_INSTALL_DIR" -type f -iname 'TreeSheets' -perm -111 | head -n 1 || true)"
     fi
+
+    if [[ -z "$resolved_bin" ]]; then
+        log "ERROR: Could not find TreeSheets executable after install."
+        exit 1
+    fi
+
+    log "Using TreeSheets executable: $resolved_bin"
+    sudo ln -sf "$resolved_bin" "$TREE_BINARY_LINK"
 }
 
-ensure_tool_installed() {
-    local cmd_name="$1"
-    local pkg_name="${2:-$1}"
-    if ! command -v "$cmd_name" >/dev/null 2>&1; then
-        ensure_pkg_installed "$pkg_name"
-    else
-        echo "--> Tool '$cmd_name' is already available."
-    fi
-}
-
-configure_cmake() {
-    local enable_lobster="$1"
-    echo "--> Configuring CMake build (ENABLE_LOBSTER=${enable_lobster})..."
-
-    cmake -S . -B "$CMAKE_BUILD_DIR" \
-        -DCMAKE_INSTALL_PREFIX=/usr \
-        -DCPACK_PACKAGING_INSTALL_PREFIX=/usr \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_POLICY_DEFAULT_CMP0177=NEW \
-        -DCMAKE_C_FLAGS="-D_GNU_SOURCE -D_POSIX_C_SOURCE=200809L" \
-        -DwxBUILD_SHARED=OFF \
-        -DwxBUILD_INSTALL=OFF \
-        -DwxUSE_REGEX=builtin \
-        -DwxUSE_ZLIB=builtin \
-        -DwxUSE_EXPAT=builtin \
-        -DwxUSE_LIBJPEG=builtin \
-        -DwxUSE_LIBPNG=builtin \
-        -DwxUSE_LIBTIFF=builtin \
-        -DwxUSE_NANOSVG=builtin \
-        -DENABLE_LOBSTER="$enable_lobster" \
-        -DTREESHEETS_VERSION="$TREESHEETS_VERSION"
-}
-
-patch_lobster_charconv_if_needed() {
-    local lobster_dir
-    local pre_count
-    local post_count
-
-    lobster_dir=$(find "$SRC_DIR/$CMAKE_BUILD_DIR/_deps" -maxdepth 2 -type d -name lobster-src | head -n 1 || true)
-    if [[ -z "$lobster_dir" ]]; then
-        echo "Warning: Lobster source directory not found; skipping manual charconv patch." >&2
-        return 0
-    fi
-
-    pre_count=$(grep -r -l "__cpp_lib_to_chars" "$lobster_dir" | wc -l || true)
-    if [[ "$pre_count" -eq 0 ]]; then
-        echo "--> Lobster charconv macro already neutralized (likely by CMake patch)."
-        return 0
-    fi
-
-    echo "--> Applying script-level Lobster charconv patch to $pre_count file(s)..."
-    find "$lobster_dir" -type f \( -name "*.h" -o -name "*.hpp" -o -name "*.hh" -o -name "*.c" -o -name "*.cc" -o -name "*.cpp" -o -name "*.cxx" -o -name "*.inl" -o -name "*.ipp" \) \
-        -exec sed -i 's/__cpp_lib_to_chars/LOBSTER_DISABLE_TO_CHARS/g' {} +
-
-    post_count=$(grep -r -l "__cpp_lib_to_chars" "$lobster_dir" | wc -l || true)
-    if [[ "$post_count" -ne 0 ]]; then
-        echo "Warning: Script-level patch verification found $post_count remaining file(s)." >&2
-        return 1
-    fi
-
-    echo "--> Script-level Lobster patch applied and verified."
-}
-
-build_package() {
-    echo "--> Building package target with $(nproc) parallel jobs..."
-    echo "--> Build log: $BUILD_LOG_FILE"
-    cmake --build "$CMAKE_BUILD_DIR" --target package -j"$(nproc)" --verbose 2>&1 | tee "$BUILD_LOG_FILE"
-}
-
-echo "============================================================"
-echo "Section 1: Preparing Host System & Toolchain"
-echo "============================================================"
-
-echo "Updating APT package lists..."
-if ! sudo apt-get -o Acquire::Retries=3 update; then
-    echo "Warning: APT update returned errors (likely third-party repo key issues). Continuing..." >&2
-fi
-
-ensure_pkg_installed "build-essential"
-ensure_tool_installed "git"
-ensure_tool_installed "gettext"
-ensure_pkg_installed "libunwind-dev"
-ensure_pkg_installed "libdw-dev"
-ensure_pkg_installed "mesa-common-dev"
-ensure_pkg_installed "libgl1-mesa-dev"
-ensure_pkg_installed "libgl1"
-ensure_pkg_installed "libglx-mesa0"
-ensure_pkg_installed "libxext-dev"
-ensure_pkg_installed "libgtk-3-dev"
-ensure_pkg_installed "squashfs-tools"
-ensure_pkg_installed "zenity"
-ensure_tool_installed "ruby"
-ensure_pkg_installed "ruby-dev"
-ensure_tool_installed "gem" "ruby"
-
-if ! command -v fpm >/dev/null 2>&1; then
-    echo "Installing fpm..."
-    sudo gem install fpm
-else
-    echo "--> 'fpm' gem is already installed."
-fi
-
-echo "============================================================"
-echo "Section 2: Native C++ Compilation & Source Patching"
-echo "============================================================"
-
-cd "$WORK_DIR"
-if [[ -d "$SRC_DIR" ]]; then
-    echo "--> Source directory exists. Pulling latest changes..."
-    (cd "$SRC_DIR" && git pull || echo "Warning: Git pull failed; continuing with existing checkout.")
-else
-    echo "--> Cloning repository..."
-    git clone "$REPO_URL" "$SRC_DIR"
-fi
-
-cd "$SRC_DIR"
-
-if [[ -d "$CMAKE_BUILD_DIR" ]]; then
-    echo "--> Removing stale build directory '$CMAKE_BUILD_DIR'..."
-    rm -rf "$CMAKE_BUILD_DIR"
-fi
-
-BUILD_LOG_FILE="$SRC_DIR/$CMAKE_BUILD_DIR/build-$(date +%Y%m%d-%H%M%S).log"
-
-configure_cmake "ON"
-patch_lobster_charconv_if_needed || true
-
-set +e
-build_package
-build_rc=$?
-set -e
-
-if [[ "$build_rc" -ne 0 ]]; then
-    echo "Warning: Build failed with ENABLE_LOBSTER=ON."
-    echo "--> Last 120 lines from build log:"
-    tail -n 120 "$BUILD_LOG_FILE" || true
-
-    echo "--> Retrying with ENABLE_LOBSTER=OFF for maximum compatibility..."
-    rm -rf "$CMAKE_BUILD_DIR"
-
-    BUILD_LOG_FILE="$SRC_DIR/$CMAKE_BUILD_DIR/build-nolobster-$(date +%Y%m%d-%H%M%S).log"
-    configure_cmake "OFF"
-    build_package
-
-    echo "--> Fallback build with ENABLE_LOBSTER=OFF succeeded."
-fi
-
-echo "============================================================"
-echo "Section 3: Package Generation & System Installation"
-echo "============================================================"
-
-if ! bash -c "
-    cd '$SRC_DIR'
-    shopt -s extglob nullglob
-    for file in $CMAKE_BUILD_DIR/treesheets_*:*.deb; do
-        [ -f \"\$file\" ] && mv -v \"\$file\" \"\${file/_+([[:digit:]]):/_}\"
-    done
-"; then
-    echo "Warning: Filename sanitization step encountered an issue. Proceeding anyway." >&2
-fi
-
-DEB_PACKAGE=$(find "$SRC_DIR/$CMAKE_BUILD_DIR" -maxdepth 1 -name "treesheets_*.deb" | head -n 1)
-if [[ -z "$DEB_PACKAGE" ]]; then
-    echo "Error: Could not find generated .deb package in $SRC_DIR/$CMAKE_BUILD_DIR." >&2
-    exit 1
-fi
-
-echo "--> Found package: $DEB_PACKAGE"
-echo "--> Build artifacts and logs are in: $SRC_DIR/$CMAKE_BUILD_DIR"
-
-read -r -p "WARNING: Install '$DEB_PACKAGE' system-wide via dpkg now? (yes/NO): " confirm_install
-if [[ "$confirm_install" == "yes" ]]; then
-    if ! sudo dpkg -i "$DEB_PACKAGE"; then
-        echo "Warning: dpkg returned an error. Attempting dependency repair..."
-        sudo apt-get install -f -y
-    fi
-    sudo update-mime-database /usr/share/mime || true
-    sudo update-desktop-database /usr/share/applications || true
-    echo "--> TreeSheets installed successfully."
-else
-    echo "--> Installation skipped by user."
-fi
-
-echo "============================================================"
-echo "Section 4: Embedded Kiosk Auto-Start Integration"
-echo "============================================================"
-
-read -r -p "WARNING: Configure TreeSheets kiosk auto-start on boot? (yes/NO): " setup_kiosk
-if [[ "$setup_kiosk" == "yes" ]]; then
+configure_kiosk_user() {
     if ! id -u "$KIOSK_USER" >/dev/null 2>&1; then
-        sudo useradd -m -G video,input -s /bin/bash "$KIOSK_USER"
+        log "Creating kiosk user '$KIOSK_USER' with sudo privileges..."
+        sudo useradd -m -s /bin/bash -G sudo,video,audio,input,tty "$KIOSK_USER"
     else
-        echo "--> User '$KIOSK_USER' already exists."
+        log "User '$KIOSK_USER' already exists. Ensuring required groups..."
+        sudo usermod -aG sudo,video,audio,input,tty "$KIOSK_USER"
     fi
+}
 
-    ensure_tool_installed "xinit"
-
-    sudo bash -c "cat << 'EOF_SERVICE' > $KIOSK_SERVICE_FILE
-[Unit]
-Description=TreeSheets Embedded Kiosk
-After=systemd-user-sessions.service graphical.target
-Conflicts=getty@tty1.service
-
+configure_startx_autologin() {
+    log "Configuring systemd getty autologin on tty1 for ${KIOSK_USER}..."
+    sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
+    sudo tee /etc/systemd/system/getty@tty1.service.d/override.conf >/dev/null <<EOF_GETTY
 [Service]
-User=$KIOSK_USER
-Group=$KIOSK_USER
-PAMName=login
-Environment=\"DISPLAY=:0\"
-ExecStart=/usr/bin/xinit /usr/bin/TreeSheets -- :0 -nolisten tcp vt1
-Restart=always
-RestartSec=5
+ExecStart=
+ExecStart=-/sbin/agetty --autologin ${KIOSK_USER} --noclear %I \$TERM
+Type=idle
+EOF_GETTY
 
-[Install]
-WantedBy=graphical.target
-EOF_SERVICE"
-
-    sudo systemctl daemon-reload
-
-    read -r -p "Enable and start kiosk service immediately? (yes/NO): " start_kiosk
-    if [[ "$start_kiosk" == "yes" ]]; then
-        sudo systemctl enable treesheets-kiosk.service
-        sudo systemctl start treesheets-kiosk.service || {
-            echo "Error: Failed to start kiosk service. Check: journalctl -u treesheets-kiosk.service" >&2
-        }
-    else
-        echo "--> Service created but not enabled. Enable later with: sudo systemctl enable treesheets-kiosk.service"
-    fi
-else
-    echo "--> Skipping kiosk setup."
+    log "Writing ${KIOSK_USER} shell profile to auto-run startx on tty1..."
+    sudo -u "$KIOSK_USER" tee "$KIOSK_HOME/.bash_profile" >/dev/null <<'EOF_PROFILE'
+# Auto-start X on tty1 only.
+if [[ -z "${DISPLAY:-}" && "$(tty)" == "/dev/tty1" ]]; then
+    exec startx
 fi
+EOF_PROFILE
+}
 
-echo "============================================================"
-echo "Deployment Script Completed Successfully!"
-echo "============================================================"
+configure_xinit_ratpoison_kiosk() {
+    log "Writing ratpoison config..."
+    sudo -u "$KIOSK_USER" tee "$KIOSK_HOME/.ratpoisonrc" >/dev/null <<'EOF_RAT'
+escape C-t
+startup_message off
+set winfmt %n:%t
+exec xset -dpms
+exec xset s off
+exec xset s noblank
+EOF_RAT
+
+    log "Writing X init script (ratpoison + TreeSheets kiosk)..."
+    sudo -u "$KIOSK_USER" tee "$KIOSK_HOME/.xinitrc" >/dev/null <<'EOF_XINIT'
+#!/usr/bin/env bash
+set -euo pipefail
+
+xset -dpms
+xset s off
+xset s noblank
+
+ratpoison &
+RP_PID=$!
+
+# Kiosk loop: TreeSheets always starts with portable + multi-instance flags.
+while true; do
+    /usr/local/bin/treesheets -p -i
+    sleep 1
+done &
+TS_PID=$!
+
+wait "$TS_PID"
+kill "$RP_PID" 2>/dev/null || true
+EOF_XINIT
+
+    sudo chmod 0755 "$KIOSK_HOME/.xinitrc"
+    sudo chown "$KIOSK_USER:$KIOSK_USER" "$KIOSK_HOME/.xinitrc" "$KIOSK_HOME/.ratpoisonrc" "$KIOSK_HOME/.bash_profile"
+}
+
+enable_boot_flow() {
+    log "Reloading systemd and enabling getty@tty1..."
+    sudo systemctl daemon-reload
+    sudo systemctl enable getty@tty1.service
+
+    log "Kiosk deployment complete. Reboot to start tty1 -> startx -> ratpoison -> TreeSheets."
+}
+
+main() {
+    require_cmd sudo sudo
+    require_cmd curl curl
+    require_cmd python3 python3
+
+    install_base_packages
+
+    mapfile -t asset_info < <(fetch_latest_asset)
+    install_treesheets_from_asset "${asset_info[0]:-}" "${asset_info[1]:-}" "${asset_info[2]:-unknown}"
+
+    configure_kiosk_user
+    configure_startx_autologin
+    configure_xinit_ratpoison_kiosk
+    enable_boot_flow
+
+    log "Done. You can test immediately by switching to tty1 and logging in as ${KIOSK_USER}, or rebooting."
+}
+
+main "$@"
