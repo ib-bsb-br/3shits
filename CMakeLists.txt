@@ -24,6 +24,16 @@ project(TreeSheets
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
 OPTION(ENABLE_LOBSTER "Enable Lobster scripting" ON)
+option(ENABLE_IPO "Enable interprocedural/link time optimization" ON)
+if(ENABLE_IPO)
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT iporesult OUTPUT output)
+    if(iporesult)
+        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+    else()
+        message(WARNING "IPO is not supported: ${output}")
+    endif()
+endif()
 
 ## Compiler-specific
 
@@ -42,6 +52,19 @@ endif()
 
 ### Thirdparty dependencies
 
+# Set wxWidgets options to exclude unused libraries
+
+set(wxUSE_WEBVIEW FALSE)
+set(wxUSE_STC FALSE)
+set(wxUSE_RIBBON FALSE)
+set(wxUSE_PROPGRID FALSE)
+set(wxUSE_RICHTEXT FALSE)
+set(wxUSE_MEDIACTRL FALSE)
+set(wxUSE_HTML FALSE)
+set(wxUSE_WXHTML_HELP FALSE)
+
+# Include dependencies
+
 include(FetchContent)
 FetchContent_Declare(
     fault
@@ -54,9 +77,9 @@ include(FetchContent)
 FetchContent_Declare(
     wxwidgets
     GIT_REPOSITORY https://github.com/wxWidgets/wxWidgets
-    GIT_TAG v3.2.10
+    GIT_TAG v3.3.2
     GIT_SHALLOW ON
-    FIND_PACKAGE_ARGS 3.2.10 NAMES wxWidgets
+    FIND_PACKAGE_ARGS 3.3.2 NAMES wxWidgets
 )
 FetchContent_MakeAvailable(wxwidgets)
 
