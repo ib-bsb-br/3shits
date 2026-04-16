@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TreeSheets-style nested hierarchy (modern CSS Grid/Subgrid)</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --surface: oklch(98% 0.01 240);
+      --line: oklch(78% 0.01 240);
+      --text: oklch(22% 0.02 250);
+      --gap: 0.6rem;
+      --radius: 0.5rem;
+      --min-col: 15rem;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 1.2rem;
+      font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+      color: var(--text);
+      background: canvas;
+      line-height: 1.35;
+    }
+
+    .tree {
+      display: grid;
+      gap: 1rem;
+      max-inline-size: 1100px;
+      margin-inline: auto;
+    }
+
+    .grid {
+      display: grid;
+      gap: var(--gap);
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--min-col)), 1fr));
+      align-items: start;
+    }
+
+    .cell {
+      display: grid;
+      gap: var(--gap);
+      padding: 0.65rem;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: color-mix(in oklab, var(--surface), slategray calc(var(--depth, 1) * 5%));
+      min-inline-size: 0;
+      box-shadow: 0 1px 1px hsl(0 0% 0% / 0.06);
+    }
+
+    .cell[data-depth="1"] { --depth: 1; }
+    .cell[data-depth="2"] { --depth: 2; }
+    .cell[data-depth="3"] { --depth: 3; }
+    .cell[data-depth="4"] { --depth: 4; }
+    .cell[data-depth="5"] { --depth: 5; }
+
+    .cell__title {
+      margin: 0;
+      font-weight: 600;
+      font-size: clamp(0.9rem, 0.75rem + 0.5vw, 1.1rem);
+      text-wrap: balance;
+    }
+
+    .grid[data-layout="multi"] > .cell {
+      grid-column: span 1;
+    }
+
+    .cell[data-span="full"] {
+      grid-column: 1 / -1;
+    }
+
+    @supports (grid-template-columns: subgrid) {
+      .cell > .grid {
+        grid-template-columns: subgrid;
+      }
+    }
+
+    @media (max-width: 700px) {
+      :root { --min-col: 12rem; }
+    }
+  </style>
+</head>
+<body>
+  <main class="tree" aria-label="Nested hierarchical cells">
+    <section class="cell" data-depth="1">
+      <h1 class="cell__title">Top Layer (001)</h1>
+      <div class="grid" data-layout="multi">
+        <article class="cell" data-depth="2">
+          <h2 class="cell__title">Next Layer (002)</h2>
+          <div class="grid" data-layout="multi">
+            <article class="cell" data-depth="3">
+              <h3 class="cell__title">Layer 003 item 01</h3>
+            </article>
+
+            <article class="cell" data-depth="3">
+              <h3 class="cell__title">Layer 003 item 02 but set as multiple</h3>
+            </article>
+
+            <article class="cell" data-depth="3">
+              <h3 class="cell__title">Layer 003 item 03 also set as multiple</h3>
+              <div class="grid">
+                <article class="cell" data-depth="4">
+                  <h4 class="cell__title">Layer 004</h4>
+                  <div class="grid">
+                    <article class="cell" data-depth="5"><h5 class="cell__title">Layer 005 item 01</h5></article>
+                    <article class="cell" data-depth="5"><h5 class="cell__title">Layer 005 item 02</h5></article>
+                  </div>
+                </article>
+              </div>
+            </article>
+
+            <article class="cell" data-depth="3">
+              <h3 class="cell__title">Layer 003 item 04</h3>
+              <div class="grid">
+                <article class="cell" data-depth="4">
+                  <h4 class="cell__title">Layer 004</h4>
+                  <div class="grid">
+                    <article class="cell" data-depth="5"><h5 class="cell__title">Layer 005 item 01</h5></article>
+                    <article class="cell" data-depth="5"><h5 class="cell__title">Layer 005 item 02</h5></article>
+                  </div>
+                </article>
+              </div>
+            </article>
+
+            <article class="cell" data-depth="3">
+              <h3 class="cell__title">Layer 003 item 05</h3>
+              <div class="grid">
+                <article class="cell" data-depth="4">
+                  <h4 class="cell__title">Layer 004 set 2</h4>
+                  <div class="grid">
+                    <article class="cell" data-depth="5"><h5 class="cell__title">Layer 005 set 2 item 01</h5></article>
+                    <article class="cell" data-depth="5"><h5 class="cell__title">Layer 005 set 2 item 02</h5></article>
+                  </div>
+                </article>
+              </div>
+            </article>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="cell" data-depth="1">
+      <h1 class="cell__title">A Second Top Layer (001)</h1>
+      <div class="grid" data-layout="multi">
+        <article class="cell" data-depth="2">
+          <h2 class="cell__title">And so on (layer 002)</h2>
+          <div class="grid">
+            <article class="cell" data-depth="3">
+              <h3 class="cell__title">And on and on we go (layer 003)</h3>
+            </article>
+          </div>
+        </article>
+
+        <article class="cell" data-depth="2">
+          <h2 class="cell__title">And yet more layer 002</h2>
+          <div class="grid">
+            <article class="cell" data-depth="3">
+              <h3 class="cell__title">Layer 003 item 05</h3>
+              <div class="grid">
+                <article class="cell" data-depth="4">
+                  <h4 class="cell__title">Layer 004 set 2</h4>
+                  <div class="grid">
+                    <article class="cell" data-depth="5"><h5 class="cell__title">Layer 005 set 2 item 01</h5></article>
+                    <article class="cell" data-depth="5"><h5 class="cell__title">Layer 005 set 2 item 02</h5></article>
+                  </div>
+                </article>
+              </div>
+            </article>
+          </div>
+        </article>
+
+        <article class="cell" data-depth="2"><h2 class="cell__title">And more layer 002</h2></article>
+        <article class="cell" data-depth="2"><h2 class="cell__title">And EVEN more layer 002</h2></article>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
